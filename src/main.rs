@@ -2,17 +2,17 @@ use lender::prelude::{Lender, Lending};
 
 struct Child<'lend> {
     data: &'lend mut Data,
-    found_circuit: bool,
+    returned: bool,
 }
 
 impl<'lend> From<&'lend mut InnerParent> for Child<'lend> {
     fn from(parent: &'lend mut InnerParent) -> Self {
-        let mut circuit_search = Self {
+        let mut child = Self {
             data: &mut parent.data,
-            found_circuit: false,
+            returned: false,
         };
-        circuit_search.push_to_stack(0);
-        circuit_search
+        child.push_to_stack(0);
+        child
     }
 }
 
@@ -56,22 +56,20 @@ impl<'lend2, 'lend> Lending<'lend2> for Child<'lend> {
 
 impl<'lend> Lender for Child<'lend> {
     fn next<'lend2>(&'lend2 mut self) -> Option<<Self as Lending<'lend2>>::Lend> {
-        if self.found_circuit {
+        if self.returned {
             self.pop_from_stack();
             None
         } else {
-            self.found_circuit = true;
+            self.returned = true;
             Some(&self.data.stack)
         }
     }
 }
 
 struct Data {
-    /// The stack of nodes in the current circuit.
     stack: Vec<usize>,
 }
 
-/// Iterator for Johnson's algorithm.
 struct InnerParent {
     /// The underlying data structure for the algorithm.
     data: Data,
@@ -87,7 +85,7 @@ impl Lender for InnerParent {
         while self.current_root_id < 5 {
             debug_assert!(
                 self.data.stack.is_empty(),
-                "Stack at address {} should be empty at the start of the circuit search, but in parent is {:?}",
+                "Stack at address {} should be empty at the start of the inner child loop, but in parent is {:?}",
                 self.data.stack.as_ptr() as usize,
                 self.data.stack
             );
@@ -100,17 +98,16 @@ impl Lender for InnerParent {
     }
 }
 
-/// Johnson's algorithm for finding all cycles in a sparse matrix.
 pub struct Parent<'parent> {
     /// The underlying iterator.
     inner: lender::Flatten<'parent, InnerParent>,
 }
 
-impl<'matrix> Iterator for Parent<'matrix> {
+impl<'parent> Iterator for Parent<'parent> {
     type Item = Vec<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|circuit| circuit.to_vec())
+        self.inner.next().map(|vec| vec.to_vec())
     }
 }
 
